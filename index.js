@@ -37,15 +37,81 @@ async function main() {
     // Wait longer for the page to load
     await new Promise(resolve => setTimeout(resolve, 5000));
     
-    console.log("On resume page, looking for graduation tab...");
+    console.log("On resume page, looking for education section...");
     
     try {
-        // Try to find the graduation tab with a longer timeout
-        await tab.waitForSelector("#graduation-tab .ic-16-plus", { visible: true, timeout: 60000 });
-        await tab.click("#graduation-tab .ic-16-plus");
+        // Check if we need to add education or if it already exists
+        const educationSections = await tab.$$('.education_details');
+        
+        if (educationSections.length > 0) {
+            console.log("Education section already exists, checking if we need to edit...");
+            
+            // Look for edit buttons
+            const editButtons = await tab.$$('.edit-btn');
+            if (editButtons.length > 0) {
+                console.log("Found edit button, clicking...");
+                await editButtons[0].click();
+                await new Promise(resolve => setTimeout(resolve, 2000));
+            }
+        } else {
+            console.log("Looking for add education button...");
+            
+            // Try to find the add education button by text content
+            const addButtons = await tab.$$('a.add_new_btn');
+            let educationButtonFound = false;
+            
+            for (const button of addButtons) {
+                const text = await tab.evaluate(el => el.textContent.trim(), button);
+                console.log("Found button:", text);
+                
+                if (text.includes("Add education")) {
+                    console.log("Clicking 'Add education' button...");
+                    await button.click();
+                    educationButtonFound = true;
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    break;
+                }
+            }
+            
+            if (!educationButtonFound) {
+                console.log("Could not find add education button, trying alternative selectors...");
+                
+                // Try by CSS selector that might contain the add education button
+                const possibleButtons = await tab.$$('.add-section-btn, .add-btn, .btn-add');
+                for (const button of possibleButtons) {
+                    const text = await tab.evaluate(el => el.textContent.trim(), button);
+                    console.log("Possible add button:", text);
+                    
+                    if (text.includes("Add") && (text.includes("education") || text.includes("degree"))) {
+                        console.log("Found education add button, clicking...");
+                        await button.click();
+                        await new Promise(resolve => setTimeout(resolve, 2000));
+                        break;
+                    }
+                }
+            }
+        }
+        
+        // Now try to fill in education details
         await graduation(dataFile[0]);
         
-        // Continue with the rest of the flow
+        // Continue with the rest of the flow with increased timeouts
+        await new Promise(resolve => setTimeout(resolve, 3000));
+
+        // Look for next button with more flexible selector
+        const nextButtons = await tab.$$('button.next-button, .btn-next, .next-btn');
+        if (nextButtons.length > 0) {
+            console.log("Found next button, clicking...");
+            await nextButtons[0].click();
+            await new Promise(resolve => setTimeout(resolve, 3000));
+        } else {
+            console.log("Could not find next button, trying to continue anyway...");
+        }
+
+        // Continue with training section
+        await training(dataFile[0]);
+        
+        // Rest of the flow continues...
         await new Promise(function (resolve, reject) {
             return setTimeout(resolve, 1000);
         });
@@ -82,66 +148,86 @@ async function main() {
         });
         await application(dataFile[0]);
     } catch (error) {
-        console.log("Error finding graduation tab:", error.message);
+        console.log("Error in main flow:", error.message);
         console.log("Taking a screenshot to debug...");
-        await tab.screenshot({ path: 'debug-screenshot.png' });
+        await tab.screenshot({ path: 'error-screenshot.png' });
         
-        // Try an alternative approach
-        console.log("Trying alternative approach...");
-        const buttons = await tab.$$('button');
-        for (const button of buttons) {
-            const text = await tab.evaluate(el => el.textContent, button);
-            console.log("Found button:", text);
-            if (text.includes("Add")) {
-                console.log("Clicking 'Add' button...");
-                await button.click();
-                break;
-            }
+        console.log("Current page URL:", await tab.url());
+        console.log("Trying to continue with application section directly...");
+        
+        try {
+            await application(dataFile[0]);
+        } catch (appError) {
+            console.log("Error in application section:", appError.message);
         }
-        
-        // Continue with graduation if we found an alternative
-        await graduation(dataFile[0]);
     }
 }
 
+// Modify the graduation function to be more resilient
 async function graduation(data) {
-    await tab.waitForSelector("#degree_completion_status_pursuing", { visible: true });
-    await tab.click("#degree_completion_status_pursuing");
+    try {
+        console.log("Attempting to fill graduation details...");
+        
+        // Wait for form elements with increased timeout and try different selectors
+        const degreeStatusSelector = "#degree_completion_status_pursuing, input[name='degree_status'][value='pursuing']";
+        await tab.waitForSelector(degreeStatusSelector, { visible: true, timeout: 30000 });
+        await tab.click(degreeStatusSelector);
+        
+        const collegeSelector = "#college, input[name='college']";
+        await tab.waitForSelector(collegeSelector, { visible: true, timeout: 30000 });
+        await tab.type(collegeSelector, data["College"]);
+        
+        // Handle year selection more flexibly
+        try {
+            await tab.waitForSelector("#start_year_chosen", { visible: true, timeout: 10000 });
+            await tab.click("#start_year_chosen");
+            await tab.waitForSelector(".active-result", { visible: true, timeout: 10000 });
+            
+            // Get all year options and select one that makes sense (e.g., 2020)
+            const yearOptions = await tab.$$(".active-result");
+            for (const option of yearOptions) {
+                const yearText = await tab.evaluate(el => el.textContent.trim(), option);
+                if (yearText === "2020") {
+                    await option.click();
+                    break;
+                }
+            }
+        } catch (yearError) {
+            console.log("Error selecting start year:", yearError.message);
+            // Try alternative year selector if available
+        }
+        
+        // Similar approach for end year
+        await tab.waitForSelector("#end_year_chosen", { visible: true });
+        await tab.click('#end_year_chosen');
+        await tab.waitForSelector("#end_year_chosen .active-result[data-option-array-index = '6']", { visible: true });
+        await tab.click("#end_year_chosen .active-result[data-option-array-index = '6']");
 
-    await tab.waitForSelector("#college", { visible: true });
-    await tab.type("#college", data["College"]);
+        await tab.waitForSelector("#degree", { visible: true });
+        await tab.type("#degree", data["Degree"]);
 
-    await tab.waitForSelector("#start_year_chosen", { visible: true });
-    await tab.click("#start_year_chosen");
-    await tab.waitForSelector(".active-result[data-option-array-index='5']", { visible: true });
-    await tab.click(".active-result[data-option-array-index='5']");
+        await new Promise(function (resolve, reject) {
+            return setTimeout(resolve, 1000);
+        });
+        await tab.waitForSelector("#stream", { visible: true });
+        await tab.type("#stream", data["Stream"]);
 
-    await tab.waitForSelector("#end_year_chosen", { visible: true });
-    await tab.click('#end_year_chosen');
-    await tab.waitForSelector("#end_year_chosen .active-result[data-option-array-index = '6']", { visible: true });
-    await tab.click("#end_year_chosen .active-result[data-option-array-index = '6']");
+        await new Promise(function (resolve, reject) {
+            return setTimeout(resolve, 1000);
+        });
+        await tab.waitForSelector("#performance-college", { visible: true });
+        await tab.type("#performance-college", data["Percentage"]);
 
-    await tab.waitForSelector("#degree", { visible: true });
-    await tab.type("#degree", data["Degree"]);
+        await new Promise(function (resolve, reject) {
+            return setTimeout(resolve, 1000);
+        });
 
-    await new Promise(function (resolve, reject) {
-        return setTimeout(resolve, 1000);
-    });
-    await tab.waitForSelector("#stream", { visible: true });
-    await tab.type("#stream", data["Stream"]);
-
-    await new Promise(function (resolve, reject) {
-        return setTimeout(resolve, 1000);
-    });
-    await tab.waitForSelector("#performance-college", { visible: true });
-    await tab.type("#performance-college", data["Percentage"]);
-
-    await new Promise(function (resolve, reject) {
-        return setTimeout(resolve, 1000);
-    });
-
-    await tab.click("#college-submit");
-
+        await tab.click("#college-submit");
+    } catch (error) {
+        console.log("Error in graduation function:", error.message);
+        console.log("Taking a screenshot of graduation form...");
+        await tab.screenshot({ path: 'graduation-form-error.png' });
+    }
 }
 
 async function training(data) {
