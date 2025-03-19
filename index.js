@@ -8,6 +8,7 @@ async function main() {
     let browser = await pup.launch({
         headless: false,
         defaultViewport: false,
+        executablePath: "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
         args: ["--start-maximized"]
     });
 
