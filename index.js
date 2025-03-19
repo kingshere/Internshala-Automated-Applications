@@ -15,65 +15,93 @@ async function main() {
     let pages = await browser.pages();
     tab = pages[0];
     await tab.goto("https://internshala.com/");
+    
+    // Wait for the login button and click it
+    await tab.waitForSelector("button.login-cta", { visible: true, timeout: 60000 });
     await tab.click("button.login-cta");
+    
+    // Fill in login details
     await tab.type("#modal_email", id);
     await tab.type("#modal_password", pass);
     await tab.click("#modal_login_submit");
-    await tab.waitForNavigation({ waitUntil: "networkidle2" });
-    await tab.click(".nav-link.dropdown-toggle.profile_container .is_icon_header.ic-24-filled-down-arrow");
+    await tab.waitForNavigation({ waitUntil: "networkidle2", timeout: 60000 });
+    
+    // Add a longer wait time to ensure the page is fully loaded
+    await new Promise(resolve => setTimeout(resolve, 5000));
+    
+    console.log("Logged in successfully, navigating to profile...");
+    
+    // Navigate directly to the resume page instead of using dropdown
+    await tab.goto("https://internshala.com/student/resume");
+    
+    // Wait longer for the page to load
+    await new Promise(resolve => setTimeout(resolve, 5000));
+    
+    console.log("On resume page, looking for graduation tab...");
+    
+    try {
+        // Try to find the graduation tab with a longer timeout
+        await tab.waitForSelector("#graduation-tab .ic-16-plus", { visible: true, timeout: 60000 });
+        await tab.click("#graduation-tab .ic-16-plus");
+        await graduation(dataFile[0]);
+        
+        // Continue with the rest of the flow
+        await new Promise(function (resolve, reject) {
+            return setTimeout(resolve, 1000);
+        });
 
-    let profile_options = await tab.$$(".profile_options a");
-    let app_urls = [];
-    for (let i = 0; i < 11; i++) {
-        let url = await tab.evaluate(function (ele) {
-            return ele.getAttribute("href");
-        }, profile_options[i]);
-        app_urls.push(url);
+        await tab.waitForSelector(".next-button", { visible: true });
+        await tab.click(".next-button");
+
+        await training(dataFile[0]);
+
+        await new Promise(function (resolve, reject) {
+            return setTimeout(resolve, 1000);
+        });
+
+        await tab.waitForSelector(".next-button", { visible: true });
+        await tab.click(".next-button");
+
+        await tab.waitForSelector(".btn.btn-secondary.skip.skip-button", { visible: true });
+        await tab.click(".btn.btn-secondary.skip.skip-button");
+
+        await workSample(dataFile[0]);
+
+        await new Promise(function (resolve, reject) {
+            return setTimeout(resolve, 1000);
+        });
+
+        await tab.waitForSelector("#save_work_samples", { visible: true });
+        await tab.click("#save_work_samples");
+
+        // await tab.waitForSelector(".resume_download_mobile", {visible : true});
+        // await tab.click(".resume_download_mobile");                                // if you want to download resume.
+
+        await new Promise(function (resolve, reject) {
+            return setTimeout(resolve, 1000);
+        });
+        await application(dataFile[0]);
+    } catch (error) {
+        console.log("Error finding graduation tab:", error.message);
+        console.log("Taking a screenshot to debug...");
+        await tab.screenshot({ path: 'debug-screenshot.png' });
+        
+        // Try an alternative approach
+        console.log("Trying alternative approach...");
+        const buttons = await tab.$$('button');
+        for (const button of buttons) {
+            const text = await tab.evaluate(el => el.textContent, button);
+            console.log("Found button:", text);
+            if (text.includes("Add")) {
+                console.log("Clicking 'Add' button...");
+                await button.click();
+                break;
+            }
+        }
+        
+        // Continue with graduation if we found an alternative
+        await graduation(dataFile[0]);
     }
-    await new Promise(function (resolve, reject) {
-        return setTimeout(resolve, 2000);
-    });
-    tab.goto("https://internshala.com" + app_urls[1]);
-
-    await tab.waitForSelector("#graduation-tab .ic-16-plus", { visible: true });
-    await tab.click("#graduation-tab .ic-16-plus");
-    await graduation(dataFile[0]);
-
-    await new Promise(function (resolve, reject) {
-        return setTimeout(resolve, 1000);
-    });
-
-    await tab.waitForSelector(".next-button", { visible: true });
-    await tab.click(".next-button");
-
-    await training(dataFile[0]);
-
-    await new Promise(function (resolve, reject) {
-        return setTimeout(resolve, 1000);
-    });
-
-    await tab.waitForSelector(".next-button", { visible: true });
-    await tab.click(".next-button");
-
-    await tab.waitForSelector(".btn.btn-secondary.skip.skip-button", { visible: true });
-    await tab.click(".btn.btn-secondary.skip.skip-button");
-
-    await workSample(dataFile[0]);
-
-    await new Promise(function (resolve, reject) {
-        return setTimeout(resolve, 1000);
-    });
-
-    await tab.waitForSelector("#save_work_samples", { visible: true });
-    await tab.click("#save_work_samples");
-
-    // await tab.waitForSelector(".resume_download_mobile", {visible : true});
-    // await tab.click(".resume_download_mobile");                                // if you want to download resume.
-
-    await new Promise(function (resolve, reject) {
-        return setTimeout(resolve, 1000);
-    });
-    await application(dataFile[0]);
 }
 
 async function graduation(data) {
