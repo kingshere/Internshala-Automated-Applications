@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# Package files
+package.json
+package-lock.json
+
+# Environment variables
+.env
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Debug files
+debug-screenshot.png
+error-screenshot.png
+graduation-form-error.png
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
